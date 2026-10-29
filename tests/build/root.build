@@ -17,3 +17,9 @@ exe{*}: test = true
 # The test target for cross-testing (running tests under Wine, etc).
 #
 test.target = $cxx.target
+
+# MinGW GCC keeps the console support of std::print() in a library of its
+# own.
+#
+if ($cxx.target.class == 'windows' && $cxx.id == 'gcc')
+  cxx.libs += -lstdc++exp

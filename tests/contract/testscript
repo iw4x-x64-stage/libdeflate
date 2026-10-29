@@ -1,0 +1,15 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
+
+$* precondition  >'precondition: n != 0'                    : precondition
+$* postcondition >'postcondition: r != 0'                   : postcondition
+$* invariant     >'invariant: invariant () (on exit)'       : invariant
+$* assertion     >'assertion: n != 0'                       : assertion
+$* unreachable   >'unreachable: control reached this point' : unreachable
+
+: unknown-check
+: Check name that the driver does not know
+:
+$* contract 2>>EOE != 0
+error: unknown check 'contract'
+EOE
