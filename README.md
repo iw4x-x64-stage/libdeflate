@@ -1,7 +1,17 @@
-# libdeflate - A C++ library
+# libdeflate - Deflate compression for IW4x projects.
 
-The `libdeflate` C++ library provides <SUMMARY-OF-FUNCTIONALITY>.
+The `libdeflate` library compresses and decompresses data in the deflate
+format that RFC 1951 specifies. Its decompressor accepts every data set the
+specification defines and rejects everything else with a description of the
+fault, and its compressor produces only data sets that conform to it. Data is
+processed incrementally through compressor and decompressor objects, in one
+call over a whole buffer, or through standard input and output streams.
 
+The library handles the raw deflate format. The zlib (RFC 1950) and gzip
+(RFC 1952) formats wrap it with a header and a checksum, which are left to
+their own libraries.
+
+Documentation: https://iw4x.io/projects/libdeflate/doc/
 
 ## Usage
 
@@ -9,33 +19,55 @@ To start using `libdeflate` in your project, add the following `depends`
 value to your `manifest`, adjusting the version constraint as appropriate:
 
 ```
-depends: libdeflate ^<VERSION>
+depends: libdeflate ^0.1.0
 ```
 
 Then import the library in your `buildfile`:
 
 ```
-import libs = libdeflate%lib{<TARGET>}
+import libs = libdeflate%lib{deflate}
 ```
 
+## Development
 
-## Importable targets
-
-This package provides the following importable targets:
-
-```
-lib{<TARGET>}
-```
-
-<DESCRIPTION-OF-IMPORTABLE-TARGETS>
-
-
-## Configuration variables
-
-This package provides the following configuration variables:
+The development setup for `libdeflate` uses the standard `bdep`-based
+workflow. On Linux we build natively with GCC and also cross-compile for
+Windows with MinGW-w64 GCC, running the tests under Wine with `WINEPATH`
+pointing to the directory that contains the MinGW runtime DLLs
+(`/usr/x86_64-w64-mingw32/sys-root/mingw/bin` on Fedora). For example:
 
 ```
-[bool] config.libdeflate.<VARIABLE> ?= false
+git clone https://github.com/iw4x/libdeflate.git
+cd libdeflate
+
+bdep init -C @gcc cc config.cxx=g++
+bdep init -C @mingw cc config.cxx=x86_64-w64-mingw32-g++ \
+  config.test.runner="env WINEPATH=/usr/x86_64-w64-mingw32/sys-root/mingw/bin wine"
+bdep update -a
+bdep test -a
 ```
 
-<DESCRIPTION-OF-CONFIG-VARIABLES>
+On Windows we build with MSVC from the x64 Native Tools Command Prompt or the
+matching PowerShell, which builds 64-bit binaries. For example:
+
+```
+git clone https://github.com/iw4x/libdeflate.git
+cd libdeflate
+
+bdep init -C -@msvc cc config.cxx=cl
+bdep update
+bdep test
+```
+
+## Contributing
+
+See https://github.com/iw4x/.github/blob/main/CONTRIBUTING.md
+
+## License
+
+`libdeflate` is licensed under the GNU General Public License, version 3,
+subject to the additional permissions described in version 1.1 of the IW4x
+Linking Exception.
+
+See [LICENSE](LICENSE.md), [LICENSE-EXCEPTION](LICENSE-EXCEPTION.md), and
+[AUTHORS](AUTHORS).
