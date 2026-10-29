@@ -1,0 +1,648 @@
+// Copyright (c) the IW4x authors (see the AUTHORS file).
+// SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
+
+"\name=libdeflate-manual"
+"\title=Manual"
+
+// NOTES
+//
+// - Maximum <pre> line is 70 characters.
+//
+
+"
+\h0#preface|Preface|
+
+This document describes \c{libdeflate}, a C++ library for compressing and
+decompressing data in the deflate format. For the details of the library
+interface refer to the comments in its public headers. For the format itself
+see \l{https://www.rfc-editor.org/info/rfc1951 RFC 1951}.
+
+
+\h1#intro|Introduction|
+
+The \c{libdeflate} library is a C++ implementation of the deflate compressed
+data format as specified by RFC 1951. It provides an incremental compressor
+and decompressor together with functions that work on the whole data at once
+and \c{iostream} adapters that are built on top of them.
+
+Deflate is the compressed format found inside zlib (RFC 1950) and gzip
+(RFC 1952) among others. Each of these wraps the deflate data in its own
+header and checksum, and \c{libdeflate} leaves this wrapping to the code that
+handles the container. What it handles is the deflate data itself, and it
+does so strictly: the decompressor accepts every data set that the format
+defines and rejects everything else, including a few that other decompressors
+let through (see \l{#conformance Conformance} for details).
+
+We begin with a tutorial introduction that builds a small compression utility
+three times, once with each of the library's interfaces. Specifically, we want
+to quickly get to the point where we can compress and decompress data of any
+size in a fixed amount of memory. The remaining chapters then cover the
+details that the tutorial passes over.
+
+
+\h#intro-setup|Project Setup|
+
+Our utility is called \c{pack}. It compresses its standard input to its
+standard output and, with the \c{-d} option, decompresses instead. Let's start
+by creating a new executable project for it (here we assume our current
+working directory is \c{/tmp}):
+
+\
+$ bdep new -l c++ -t exe pack
+created new executable project pack in /tmp/pack/
+
+$ cd pack
+\
+
+To use \c{libdeflate} in our project, we first edit the
+\c{repositories.manifest} file found in the root directory of the project and
+add the \c{libdeflate} repository as a prerequisite:
+
+\
+role: prerequisite
+location: https://github.com/iw4x-x64-stage/libdeflate.git#main
+\
+
+Next, we edit the \c{manifest} file (again, found in the root of our project)
+and specify the dependency on \c{libdeflate}:
+
+\
+depends: libdeflate ^0.1.0
+\
+
+Finally, we import the library in \c{pack/buildfile}. We won't be writing
+tests in this tutorial, so we also remove \c{testscript} that came with the
+project, here and in the \c{pack/} directory:
+
+\
+$ cat pack/buildfile
+
+libs =
+import libs += libdeflate%lib{deflate}
+
+exe{pack}: {hxx ixx txx cxx}{**} $libs
+
+cxx.poptions =+ \"-I$out_root\" \"-I$src_root\"
+\
+
+\N|If these files are new to you, see
+\l{https://build2.org/build2-toolchain/doc/build2-toolchain-intro.xhtml#guide-add-remove-deps
+Adding and Removing Dependencies} in the \c{build2} toolchain introduction for
+the details on each of them.|
+
+With the dependency in place, let's initialize our project in a build
+configuration:
+
+\
+$ bdep init -C @gcc cc config.cxx=g++
+initializing in project /tmp/pack/
+created configuration @gcc /tmp/pack-gcc/ 1 target
+    default,forwarded,auto-synchronized
+fetching git:github.com/iw4x-x64-stage/libdeflate#main (prerequisite
+    of dir:/tmp/pack)
+...
+synchronizing:
+  new libdeflate/0.1.0-a.0.20261029230247.24de28e312a2 (required
+    by pack)
+  new pack/0.1.0-a.0.19700101000000
+\
+
+As you can see, \c{bdep} fetched the \c{libdeflate} repository and configured
+the library in our build configuration along with \c{pack}. We are now ready
+to write some code.
+
+
+\h#intro-whole|Whole Data|
+
+The simplest way to use \c{libdeflate} is to give it the whole data at once.
+Here is the first version of \c{pack}, which works this way:
+
+\
+$ cat pack/pack.cxx
+
+#include <print>
+#include <string>
+#include <iostream>
+#include <iterator>
+#include <string_view>
+
+#include <libdeflate/compressor.hxx>
+#include <libdeflate/decompressor.hxx>
+
+using namespace std;
+
+int
+main (int argc, char* argv[])
+{
+  const bool d (argc > 1 && argv[1] == string_view (\"-d\"));
+
+  const string in (istreambuf_iterator<char> (cin), {});
+
+  try
+  {
+    print (\"{}\", d ? deflate::decompress (in) : deflate::compress (in));
+  }
+  catch (const deflate::invalid_data& e)
+  {
+    println (cerr, \"error: {}\", e.what ());
+    return 1;
+  }
+}
+\
+
+The \c{deflate::compress()} function is declared in
+\c{<libdeflate/compressor.hxx>} and \c{deflate::decompress()} in
+\c{<libdeflate/decompressor.hxx>}. Both take the data as \c{std::string_view}
+and return the result as \c{std::string}. Everything in the library is in
+the \c{deflate} namespace.
+
+Let's build our program and try it on a list of numbers:
+
+\
+$ b
+c++ pack/cxx{pack} -> ../pack-gcc/pack/pack/obje{pack}
+c++ ../pack-gcc/libdeflate-.../libdeflate/cxx{huffman} -> ...
+...
+ld ../pack-gcc/libdeflate-.../libdeflate/libs{deflate}
+ld ../pack-gcc/pack/pack/exe{pack}
+ln ../pack-gcc/pack/pack/exe{pack} -> pack/
+
+$ seq 1 100000 >numbers.txt
+
+$ pack/pack <numbers.txt >numbers.z
+$ pack/pack -d <numbers.z | cmp - numbers.txt
+
+$ wc -c numbers.txt numbers.z
+588895 numbers.txt
+212845 numbers.z
+801740 total
+\
+
+The decompressed data is the same as the original (\c{cmp} prints nothing)
+and the compressed data takes a little over a third of its size. Since we
+didn't specify the compression level, \c{compress()} used the default,
+\c{compression_level::balanced} (see \l{#levels Compression Levels} for the
+other levels).
+
+\N|Note that we gave our data file the \c{.txt} extension. The root
+directory of our project is in the header search paths (that
+\c{cxx.poptions} line in \c{pack/buildfile}), and a file called \c{numbers}
+there would take the place of the standard \c{<numbers>} header that other
+standard headers include.|
+
+Let's now see what happens if we try to decompress something that is not
+deflate data, such as our list of numbers:
+
+\
+$ pack/pack -d <numbers.txt
+error: invalid stored block length complement 13066 for length 12810
+\
+
+When \c{decompress()} encounters a fault in the data, it throws
+\c{deflate::invalid_data} with the description of the fault as the message.
+Let's decrypt this one. The first byte of our file, the digit \c{1}, has the
+lowest bit set and the next two bits clear, which says that this is the final
+block and that it is stored as is. A stored block continues on the next byte
+with its length and then the length's complement, two bytes each. In our file
+those are a newline and \c{2}, which make 12810, followed by a newline and
+\c{3}, which make 13066, and 13066 is not the complement of 12810.
+
+The \c{invalid_data} exception is derived from \c{std::invalid_argument}.
+Besides invalid data, \c{decompress()} also throws it if the data ends before
+its final block does or if anything follows it. For example:
+
+\
+$ head -c 1000 numbers.z | pack/pack -d
+error: incomplete deflate data
+\
+
+\N|Compression accepts any data and therefore never throws
+\c{invalid_data}.|
+
+This version of \c{pack} works but it keeps both the input and the output in
+memory, which limits the size of the data it can handle. Let's fix that with
+streams.
+
+
+\h#intro-streams|Streams|
+
+The \c{<libdeflate/stream.hxx>} header provides two stream classes:
+\c{deflate::ostream} compresses what we write to it into another output
+stream and \c{deflate::istream} decompresses what it reads from another input
+stream. Here is the second version of our program:
+
+\
+$ cat pack/pack.cxx
+
+#include <print>
+#include <iostream>
+#include <string_view>
+
+#include <libdeflate/stream.hxx>
+
+using namespace std;
+
+int
+main (int argc, char* argv[])
+{
+  const bool d (argc > 1 && argv[1] == string_view (\"-d\"));
+
+  cin.exceptions (ios::badbit);
+  cout.exceptions (ios::badbit | ios::failbit);
+
+  try
+  {
+    if (d)
+    {
+      deflate::istream is (cin, true /* end */);
+      cout << is.rdbuf ();
+    }
+    else
+    {
+      deflate::ostream os (cout);
+      os << cin.rdbuf ();
+      os.close ();
+    }
+  }
+  catch (const deflate::invalid_data& e)
+  {
+    println (cerr, \"error: {}\", e.what ());
+    return 1;
+  }
+}
+\
+
+Let's start with the compressing side. The \c{deflate::ostream} constructor
+takes the stream to write the compressed data to and, optionally, the
+compression level. The compressed data is complete only after \c{close()}
+writes its final block, so we call it explicitly (see \l{#contracts
+Programming Errors} for what happens if we forget). The errors of writing to
+\c{cout} come through \c{deflate::ostream} as exceptions, which is why it
+requires the other stream to have the \c{badbit} and \c{failbit} exceptions
+enabled.
+
+On the decompressing side, the second argument of the \c{deflate::istream}
+constructor says whether the compressed data must end the other stream. Here
+we pass \c{true} and so anything after the data is an error. If we pass
+\c{false} instead, whatever follows the data is left in the other stream for
+us to read next. In both cases \c{invalid_data} comes through
+\c{deflate::istream} as an exception, the same as from \c{decompress()}.
+
+Let's build and try it:
+
+\
+$ b
+c++ pack/cxx{pack} -> ../pack-gcc/pack/pack/obje{pack}
+ld ../pack-gcc/pack/pack/exe{pack}
+ln ../pack-gcc/pack/pack/exe{pack} -> pack/
+
+$ pack/pack <numbers.txt >numbers.z
+$ pack/pack -d <numbers.z | cmp - numbers.txt
+
+$ wc -c numbers.z
+212845 numbers.z
+
+$ (cat numbers.z; echo junk) | pack/pack -d >/dev/null
+error: junk after deflate data
+\
+
+So far so good. But let's also try an edge case, empty input:
+
+\
+$ pack/pack </dev/null
+terminate called after throwing an instance of 'std::__ios_failure'
+  what():  basic_ios::clear: iostream error
+\
+
+While not what we hoped for, the problem is in our program. If the stream
+buffer that we insert with \c{operator<<} has no characters, the insertion
+sets \c{failbit} on the stream, and \c{deflate::ostream}, like \c{cout},
+has the \c{failbit} exception enabled. The same happens on the decompressing
+side when the decompressed data is empty. The fix is to only insert if there
+is something to insert:
+
+\
+$ cat pack/pack.cxx
+
+...
+
+    if (d)
+    {
+      deflate::istream is (cin, true /* end */);
+
+      if (is.peek () != istream::traits_type::eof ())
+        cout << is.rdbuf ();
+    }
+    else
+    {
+      deflate::ostream os (cout);
+
+      if (cin.peek () != istream::traits_type::eof ())
+        os << cin.rdbuf ();
+
+      os.close ();
+    }
+
+...
+\
+
+Let's rebuild and try again:
+
+\
+$ b
+c++ pack/cxx{pack} -> ../pack-gcc/pack/pack/obje{pack}
+ld ../pack-gcc/pack/pack/exe{pack}
+ln ../pack-gcc/pack/pack/exe{pack} -> pack/
+
+$ pack/pack </dev/null | od -An -tx1
+ 03 00
+
+$ pack/pack </dev/null | pack/pack -d | wc -c
+0
+\
+
+As you can see, empty data compresses into two bytes: a final block
+compressed with the fixed codes that contains nothing but the end of the
+block.
+
+Now our \c{pack} can handle data of any size. Both streams keep a buffer on
+each side and the compressor keeps a window of the data it searches for
+matches, and that is all the memory they need. Let's compress 100MB of
+zeros and see how much memory it takes:
+
+\
+$ head -c 100000000 /dev/zero | \\
+  /usr/bin/time -f '%M KB' pack/pack | wc -c
+5052 KB
+97199
+\
+
+Notice that the 5MB that our program takes includes the C++ runtime and
+\c{libdeflate} itself. With ten times as much data we see about the
+same figure.
+
+\N|To read the data, \c{deflate::istream} only takes what the other stream's
+buffer already holds and, if the compressed data doesn't end the stream, puts
+back what it took and didn't use. The other stream's buffer must therefore be
+able to put back the characters of its current get area, which the standard
+file and string stream buffers can.|
+
+\N|On Windows the standard streams are opened in the text mode, which
+translates line endings and so corrupts binary data. A real \c{pack} would
+switch \c{stdin} and \c{stdout} to the binary mode with \c{_setmode()}
+first.|
+
+
+\h#intro-incremental|Incremental Interface|
+
+Streams are convenient when the data comes from a stream and goes to one.
+When it comes from somewhere else, for example, a network connection or a
+memory-mapped file, we can use the compressor and decompressor directly. Here
+is the third version of our program, which does that:
+
+\
+$ cat pack/pack.cxx
+
+#include <print>
+#include <iostream>
+#include <string_view>
+
+#include <libdeflate/compressor.hxx>
+#include <libdeflate/decompressor.hxx>
+
+using namespace std;
+
+int
+main (int argc, char* argv[])
+{
+  const bool d (argc > 1 && argv[1] == string_view (\"-d\"));
+
+  cin.exceptions (ios::badbit);
+  cout.exceptions (ios::badbit | ios::failbit);
+
+  auto run = [] (auto& c)
+  {
+    char in[4096];
+    char out[4096];
+
+    while (!c.finished ())
+    {
+      cin.read (in, sizeof (in));
+
+      string_view i (in, static_cast<size_t> (cin.gcount ()));
+      const bool end (cin.eof ());
+
+      for (deflate::progress p {0, sizeof (out)};
+           !c.finished () &&
+           (!i.empty () || p.produced == sizeof (out)); )
+      {
+        p = c.next (i, out, end);
+        i.remove_prefix (p.consumed);
+
+        cout.write (out, static_cast<streamsize> (p.produced));
+      }
+    }
+  };
+
+  try
+  {
+    if (d)
+    {
+      deflate::decompressor x;
+      run (x);
+    }
+    else
+    {
+      deflate::compressor c;
+      run (c);
+    }
+  }
+  catch (const deflate::invalid_data& e)
+  {
+    println (cerr, \"error: {}\", e.what ());
+    return 1;
+  }
+}
+\
+
+Let's unpack the \c{run} lambda. The \c{deflate::compressor} and
+\c{deflate::decompressor} classes have the same interface, so one lambda
+handles both. The work is done by the \c{next()} member function, which takes
+the next part of the input, the output buffer, and whether this part is the
+last one. It returns a \c{deflate::progress} value with the number of input
+bytes it \c{consumed} and the number of output bytes it \c{produced}, which
+we use to advance the input and to write the output.
+
+The outer loop reads the input in parts and the inner loop hands each part to
+\c{next()}. Notice that the inner loop keeps calling \c{next()} after the
+input is used up if the previous call filled the output buffer. A single
+match can produce up to 258 bytes of output from a few bits of input, so a
+full output buffer means there may be more output to write for the input that
+was already consumed.
+
+The \c{end} argument says that the data ends within this part. Our program
+learns that when \c{cin} reaches the end of its input. For the decompressor,
+\c{end} means that the compressed data must end within this part, and if the
+input runs out before it does, \c{next()} throws \c{invalid_data}. For the
+compressor, it means that there is no more data to compress, so it can finish
+the compressed data once it has consumed this part. Until then the
+compressor holds on to the data that later input may still find matches in,
+and a call to \c{next()} may consume all of its input and produce nothing.
+Once we pass \c{end} as \c{true}, we must keep passing \c{true} in the calls
+that follow.
+
+Both classes report the end with \c{finished()}, which for the decompressor
+means that it has reached the end of the compressed data and for the
+compressor that it has written all of it. Note that the decompressor never
+consumes input past the end of the compressed data. So if the deflate data is
+embedded in another format, whatever follows it remains in the input for the
+caller to process.
+
+Let's build our last version and compare its result with the previous one:
+
+\
+$ b
+c++ pack/cxx{pack} -> ../pack-gcc/pack/pack/obje{pack}
+ld ../pack-gcc/pack/pack/exe{pack}
+ln ../pack-gcc/pack/pack/exe{pack} -> pack/
+
+$ pack/pack <numbers.txt | cmp - numbers.z
+$ pack/pack -d <numbers.z | cmp - numbers.txt
+\
+
+The compressed data is the same as what the streams produced. The compressor
+output depends only on the input and the compression level, so it doesn't
+matter how we split the input into parts.
+
+Both classes also provide \c{reset()}, which brings an object back to its
+initial state so that we can reuse it for other data. Note also that after
+\c{next()} throws, the decompressor can only be reset, and that the output
+written by the call that throws is not reported.
+
+
+
+\h1#levels|Compression Levels|
+
+The compression level controls how much time the compressor spends looking
+for matches. It is a value of the \c{deflate::compression_level} enumeration
+in the range from 0 to 9, with the following enumerators naming the usual
+levels:
+
+\
+store     0  Stored blocks only, no search for matches.
+fastest   1  Shortest search.
+balanced  6  The default.
+smallest  9  Longest search.
+\
+
+Any other value in the range is a level as well. To compress at a level other
+than the default, we pass it to \c{compress()}, to the \c{compressor}
+constructor, or to the \c{deflate::ostream} constructor. For example:
+
+\
+string c (deflate::compress (in, deflate::compression_level::smallest));
+
+deflate::compressor x (static_cast<deflate::compression_level> (4));
+
+deflate::ostream os (cout, deflate::compression_level::fastest);
+\
+
+The compressor writes each block in the form that makes it the smallest,
+which is one of stored, compressed with the fixed codes, and compressed with
+codes of its own. A block holds up to 16384 literals and matches, so at level
+0 our list of numbers ends up in 36 stored blocks.
+
+\N|The format lets a match refer up to 32768 bytes back and leaves the choice
+of distances to the compressor. Our compressor uses distances of up to 32505
+bytes, which leaves room in its window for the lookahead that the search for
+the longest match needs.|
+
+
+\h1#conformance|Conformance|
+
+The decompressor accepts every data set that RFC 1951 defines and rejects
+everything else. The format defines some cases only by omission, and the
+decompressor rejects those as well. Specifically, it throws
+\c{invalid_data} on the first of the following faults:
+
+\ul|
+
+\li|A block of type 3.|
+
+\li|A stored block whose length doesn't match the complement that follows
+it.|
+
+\li|More than 286 literal/length codes.|
+
+\li|A literal/length code, or the code of the code lengths, that is
+incomplete or over-subscribed.|
+
+\li|A distance code that is over-subscribed or incomplete, with the
+exception of a single code of length one.|
+
+\li|A code length repeat with no previous length or past the number of code
+lengths.|
+
+\li|A literal/length code with no code for the end of the block.|
+
+\li|Literal/length symbols 286 and 287 and distance symbols 30 and 31 in the
+compressed data. These symbols only take part in the construction of the
+fixed codes.|
+
+\li|Length 258 encoded with symbol 284. The format encodes this length with
+symbol 285.|
+
+\li|A match in a block without distance codes.|
+
+\li|A match that refers back before the start of the data.|
+
+\li|Data that ends before its final block does.|
+
+|
+
+The decompressor accepts 32 distance codes in a dynamic block header, which
+the format allows, with only the first 30 used in the data. It also accepts a
+block whose distance code has no codes at all, as long as that block has no
+matches.
+
+The compressor only writes data that the decompressor accepts. In particular,
+it never uses the reserved symbols, and its only incomplete code is a single
+distance code of length one.
+
+
+\h1#contracts|Programming Errors|
+
+Using the library in a way that its documentation rules out is a programming
+error, which the library reports as a contract violation. Recall that in the
+streams version of \c{pack} we call \c{close()} on \c{deflate::ostream}
+explicitly. Let's see what happens if we forget:
+
+\
+$ pack/pack <numbers.txt >/dev/null
+stream.cxx:262: error: precondition violated: !is_open () ||
+    !good () || uncaught_exceptions () != 0
+stream.cxx:262: note: in '~ostream'
+\
+
+A \c{deflate::ostream} that is destroyed while still open would leave the
+compressed data incomplete, so it treats this as a programming error unless
+the stream is no longer good or an exception is being thrown.
+
+By default, a contract violation prints a report like this to \c{stderr} and
+aborts the process. To handle it differently, for example, to throw an
+exception in a test, we can install our own handler with
+\c{deflate::set_contract_handler()}, declared in
+\c{<libdeflate/contract.hxx>}. The handler receives a
+\c{deflate::contract_violation} that describes the failed check. If the
+handler returns, the default report is printed and the process is aborted all
+the same.
+
+The amount of checking is selected when building the library with the
+\c{LIBDEFLATE_CONTRACT} macro: \c{0} omits the checks, \c{1} (the default)
+checks preconditions and assertions, and \c{2} adds postconditions and
+invariants. For example, to run the library's tests at the highest level:
+
+\
+$ b test config.cxx.poptions=-DLIBDEFLATE_CONTRACT=2
+\
+"

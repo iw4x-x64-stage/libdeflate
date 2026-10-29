@@ -1,6 +1,17 @@
 # Copyright (c) the IW4x authors (see the AUTHORS file).
 # SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
 
+# Development mode: regenerate the manual from its .cli source. The
+# consumption build uses the pregenerated manual and doesn't need the cli
+# compiler (see doc/buildfile for details).
+#
+config [bool] config.libdeflate.develop ?= false
+
+develop = $config.libdeflate.develop
+
+define cli: file
+cli{*}: extension = cli
+
 # Uncomment to suppress warnings coming from external libraries.
 #
 #cxx.internal.scope = current
