@@ -1,13 +1,19 @@
 : 1
 name: libdeflate
 version: 0.1.0-a.0.z
+type: lib
 language: c++
-summary: deflate C++ library
-license: GPL-3.0-or-later ; GNU General Public License v3.0 or later.
+project: libdeflate
+summary: Deflate compression for IW4x projects.
+license: other: GPL-3.0-only with IW4x Linking Exception 1.1
+topics: development, deflate, compression, RFC 1951
 description-file: README.md
-url: https://example.org/libdeflate
+changes-file: NEWS
+url: https://iw4x.io/projects/libdeflate/
+doc-url: https://iw4x.io/projects/libdeflate/doc/
+src-url: https://github.com/iw4x/libdeflate
 email: wroy@proton.me
-#build-error-email: wroy@proton.me
+build-error-email: wroy@proton.me
 depends: * build2 >= 0.18.0
 depends: * bpkg >= 0.18.0
-#depends: libhello ^1.0.0
+builds: default
