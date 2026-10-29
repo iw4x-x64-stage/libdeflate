@@ -1,0 +1,97 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
+
+# Text whose 1kb line repeats in the larger files, which therefore compress
+# well, and random data, which doesn't. In r40k the second half repeats the
+# first at distance 20000.
+#
++touch zero
++cat <:'1' >=one
++cat <'Deflate codes repeated strings with Huffman codes.' >=small
++cat <<EOI >=1kb
+The deflate format represents a sequence of bytes as a series of blocks,
+each of which holds literal bytes and back references to strings that
+occurred earlier, within the last 32768 bytes of the data. A back reference
+is a pair of a length, from 3 to 258 bytes, and a distance, from 1 to 32768
+bytes. The literals and lengths share one alphabet and the distances have
+another, and each alphabet is coded with a Huffman code: either the fixed
+code that the format defines, or a code that the block describes in its own
+header, which suits the block's data. A block may also hold its bytes as
+they are, which is what a compressor resorts to when nothing else makes the
+data smaller. The last block of the data says so in its header, and since
+blocks need not end at a byte boundary, the data ends with the bits that
+pad the last byte. The decompressor keeps the last 32768 bytes of output
+and copies the strings that the back references point to from there,
+which may well overlap the bytes that the copy itself produces.
+EOI
++cat  1kb  1kb  1kb  1kb  1kb  1kb  1kb  1kb >=8kb
++cat  8kb  8kb  8kb  8kb  8kb  8kb  8kb  8kb >=64kb
++cat 64kb 64kb 64kb 64kb 64kb 64kb 64kb 64kb >=512kb
++$* -r 20000 >=r20k
++cat r20k r20k >=r40k
++$* -r 100000 >=r100k
+
+w = $~
+
+: size
+: Compress data of each size at the default level
+:
+{{
+  $* -c 6 <<<$w/zero  | $* -d >>>$w/zero  : zero
+  $* -c 6 <<<$w/one   | $* -d >>>$w/one   : one
+  $* -c 6 <<<$w/small | $* -d >>>$w/small : small
+  $* -c 6 <<<$w/1kb   | $* -d >>>$w/1kb   : 1kb
+  $* -c 6 <<<$w/8kb   | $* -d >>>$w/8kb   : 8kb
+  $* -c 6 <<<$w/64kb  | $* -d >>>$w/64kb  : 64kb
+  $* -c 6 <<<$w/512kb | $* -d >>>$w/512kb : 512kb
+}}
+
+: level
+: Compress text at each level
+:
+{{
+  $* -c 0 <<<$w/64kb | $* -d >>>$w/64kb : 0
+  $* -c 1 <<<$w/64kb | $* -d >>>$w/64kb : 1
+  $* -c 2 <<<$w/64kb | $* -d >>>$w/64kb : 2
+  $* -c 3 <<<$w/64kb | $* -d >>>$w/64kb : 3
+  $* -c 4 <<<$w/64kb | $* -d >>>$w/64kb : 4
+  $* -c 5 <<<$w/64kb | $* -d >>>$w/64kb : 5
+  $* -c 6 <<<$w/64kb | $* -d >>>$w/64kb : 6
+  $* -c 7 <<<$w/64kb | $* -d >>>$w/64kb : 7
+  $* -c 8 <<<$w/64kb | $* -d >>>$w/64kb : 8
+  $* -c 9 <<<$w/64kb | $* -d >>>$w/64kb : 9
+}}
+
+: random
+: Compress data that doesn't compress
+:
+{{
+  $* -c 9 <<<$w/r100k | $* -d >>>$w/r100k : unique
+  $* -c 9 <<<$w/r40k  | $* -d >>>$w/r40k  : repeated
+  $* -c 0 <<<$w/r100k | $* -d >>>$w/r100k : stored
+}}
+
+: chunk
+: Compress in parts, which gives the same data as in one go
+:
+{{
+  : byte
+  :
+  $* -c 6 <<<$w/8kb >=whole;
+  $* -c 6 --chunk 1 <<<$w/8kb >>>whole
+
+  : text
+  :
+  $* -c 9 <<<$w/512kb >=whole;
+  $* -c 9 --chunk 7 <<<$w/512kb >>>whole
+
+  : random
+  :
+  $* -c 6 <<<$w/r40k >=whole;
+  $* -c 6 --chunk 13 <<<$w/r40k >>>whole
+
+  : stored
+  :
+  $* -c 0 <<<$w/r100k >=whole;
+  $* -c 0 --chunk 7 <<<$w/r100k >>>whole
+}}

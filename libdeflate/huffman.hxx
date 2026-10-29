@@ -56,6 +56,57 @@ namespace deflate
   LIBDEFLATE_SYMEXPORT bool
   huffman_single (std::span<const std::uint8_t> lengths) noexcept;
 
+  // Compute the code lengths of an optimal prefix code for the symbol
+  // frequencies, with no code longer than limit bits, and write them into
+  // lengths, indexed by symbol. The symbols that don't occur get length
+  // zero.
+  //
+  // If two or more symbols occur, then the code is complete. A single
+  // symbol gets length one and so a single code of length one (see
+  // huffman_single()), which only the distance code may be. So to get a
+  // complete code for one symbol, the caller has to make another occur.
+  //
+  // The frequencies and lengths must be of the same size, which must not
+  // exceed huffman_max_symbols, the limit must not exceed
+  // huffman_max_length, and the symbols that occur must fit into a code of
+  // that limit (up to 2^limit of them).
+  //
+  LIBDEFLATE_SYMEXPORT void
+  huffman_lengths (std::span<const std::uint32_t> frequencies,
+                   unsigned limit,
+                   std::span<std::uint8_t> lengths);
+
+  // Encoder of a canonical Huffman code (3.2.2).
+  //
+  class LIBDEFLATE_SYMEXPORT huffman_encoder
+  {
+  public:
+    // Construct an empty encoder.
+    //
+    huffman_encoder () noexcept;
+
+    // Build the encoder for the code that the lengths describe, indexed by
+    // symbol. The code must be complete, empty, or a single code of length
+    // one (see huffman_single()).
+    //
+    void
+    build (std::span<const std::uint8_t> lengths) noexcept;
+
+    // Return the symbol's codeword, reversed so that it can be written
+    // least significant bit first, and its length (zero if the symbol has
+    // no code).
+    //
+    std::uint16_t
+    code (std::size_t s) const noexcept {return code_[s];}
+
+    std::uint8_t
+    length (std::size_t s) const noexcept {return length_[s];}
+
+  private:
+    std::uint16_t code_[huffman_max_symbols];
+    std::uint8_t  length_[huffman_max_symbols];
+  };
+
   // Decoder of a canonical Huffman code (3.2.2).
   //
   // The format packs a codeword starting from its first bit, so the bits

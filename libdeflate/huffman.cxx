@@ -3,7 +3,8 @@
 
 #include <libdeflate/huffman.hxx>
 
-#include <algorithm> // ranges::fill(), ranges::count_if()
+#include <vector>
+#include <algorithm> // ranges::fill(), ranges::count_if(), ranges::sort()
 
 #include <libdeflate/contract.hxx>
 
@@ -77,6 +78,171 @@ namespace deflate
   {
     return ranges::count_if (lengths, [] (uint8_t l) {return l != 0;}) == 1 &&
            ranges::count (lengths, 1) == 1;
+  }
+
+  void
+  huffman_lengths (span<const uint32_t> frequencies,
+                   unsigned limit,
+                   span<uint8_t> lengths)
+  {
+    LIBDEFLATE_PRE (frequencies.size () == lengths.size ());
+    LIBDEFLATE_PRE (frequencies.size () <= huffman_max_symbols);
+    LIBDEFLATE_PRE (limit != 0 && limit <= huffman_max_length);
+
+    ranges::fill (lengths, 0);
+
+    // Collect the symbols that occur, ordered by frequency and then by
+    // symbol, so that the result depends on nothing else.
+    //
+    struct leaf
+    {
+      uint64_t weight;
+      uint16_t symbol;
+    };
+
+    vector<leaf> leaves;
+    for (size_t s (0); s != frequencies.size (); ++s)
+    {
+      if (frequencies[s] != 0)
+        leaves.push_back (leaf {frequencies[s], static_cast<uint16_t> (s)});
+    }
+
+    const size_t n (leaves.size ());
+
+    LIBDEFLATE_PRE (n <= (static_cast<size_t> (1) << limit));
+
+    if (n == 0)
+      return;
+
+    if (n == 1)
+    {
+      lengths[leaves.front ().symbol] = 1;
+      return;
+    }
+
+    ranges::sort (leaves,
+                  [] (const leaf& x, const leaf& y)
+                  {
+                    return x.weight != y.weight
+                      ? x.weight < y.weight
+                      : x.symbol < y.symbol;
+                  });
+
+    // Compute the lengths with the package-merge algorithm, which finds the
+    // optimal code of the limited length.
+    //
+    // We build a list of items for each of the limit levels, starting from
+    // the longest codes. The first list is the leaves. Each next one is the
+    // leaves merged by weight with the packages of the previous list's
+    // items, taken in consecutive pairs. Out of the last list we then
+    // select the first 2n - 2 items, and the length of a symbol is the
+    // number of selected items its leaf takes part in.
+    //
+    // Note that since the merge keeps the packages in order, the selected
+    // packages of a list are always its first ones, and so are the items
+    // they are made of in the previous list. So we can count the leaves
+    // list by list, going back from the last one.
+    //
+    struct item
+    {
+      uint64_t weight;
+      int32_t  leaf; // Index of the leaf or -1 if it is a package.
+    };
+
+    vector<vector<item>> lists (limit);
+
+    for (size_t i (0); i != n; ++i)
+      lists[0].push_back (item {leaves[i].weight, static_cast<int32_t> (i)});
+
+    for (unsigned k (1); k != limit; ++k)
+    {
+      const vector<item>& p (lists[k - 1]);
+      vector<item>& r (lists[k]);
+
+      size_t i (0); // Next leaf.
+      size_t j (0); // Next package (pair of items in p).
+
+      while (i != n || j + 1 < p.size ())
+      {
+        const bool package (j + 1 < p.size ());
+
+        if (i != n &&
+            (!package || leaves[i].weight <= p[j].weight + p[j + 1].weight))
+        {
+          r.push_back (item {leaves[i].weight, static_cast<int32_t> (i)});
+          ++i;
+        }
+        else
+        {
+          r.push_back (item {p[j].weight + p[j + 1].weight, -1});
+          j += 2;
+        }
+      }
+    }
+
+    for (size_t m (2 * n - 2), k (limit); k != 0; --k)
+    {
+      const vector<item>& l (lists[k - 1]);
+
+      LIBDEFLATE_ASSERT (m <= l.size ());
+
+      size_t packages (0);
+      for (size_t i (0); i != m; ++i)
+      {
+        if (l[i].leaf >= 0)
+          ++lengths[leaves[static_cast<size_t> (l[i].leaf)].symbol];
+        else
+          ++packages;
+      }
+
+      m = 2 * packages;
+    }
+  }
+
+  huffman_encoder::
+  huffman_encoder () noexcept
+    : code_ {}, length_ {}
+  {
+  }
+
+  void huffman_encoder::
+  build (span<const uint8_t> lengths) noexcept
+  {
+    LIBDEFLATE_PRE (lengths.size () <= huffman_max_symbols);
+    LIBDEFLATE_PRE (huffman_measure (lengths) == huffman_shape::complete ||
+                    huffman_measure (lengths) == huffman_shape::empty    ||
+                    huffman_single (lengths));
+
+    ranges::fill (code_, 0);
+    ranges::fill (length_, 0);
+
+    // Assign the codes the way the format describes it (3.2.2): count the
+    // codes of each length, find the first code of each length, and give
+    // the symbols of each length consecutive codes in the symbol order.
+    //
+    unsigned count[huffman_max_length + 1] {};
+
+    for (uint8_t l: lengths)
+      ++count[l];
+
+    count[0] = 0;
+
+    unsigned next[huffman_max_length + 1] {};
+
+    for (unsigned code (0), l (1); l <= huffman_max_length; ++l)
+    {
+      code = (code + count[l - 1]) << 1;
+      next[l] = code;
+    }
+
+    for (size_t s (0); s != lengths.size (); ++s)
+    {
+      if (const uint8_t l = lengths[s]; l != 0)
+      {
+        code_[s]   = static_cast<uint16_t> (reverse (next[l]++, l));
+        length_[s] = l;
+      }
+    }
   }
 
   huffman_decoder::

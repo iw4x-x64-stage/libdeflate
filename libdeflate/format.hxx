@@ -64,6 +64,10 @@ namespace deflate
     16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15
   };
 
+  // Longest code of the code length code, whose lengths take 3 bits.
+  //
+  inline constexpr unsigned max_code_length_length (7);
+
   // Shortest length and the number of extra bits of each length symbol,
   // starting from 257 (3.2.5).
   //
