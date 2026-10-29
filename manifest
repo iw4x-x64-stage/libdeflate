@@ -11,7 +11,7 @@ description-file: README.md
 changes-file: NEWS
 url: https://iw4x.io/projects/libdeflate/
 doc-url: https://iw4x.io/projects/libdeflate/doc/
-src-url: https://github.com/iw4x/libdeflate
+src-url: https://github.com/iw4x-x64-stage/libdeflate
 email: wroy@proton.me
 build-error-email: wroy@proton.me
 depends: * build2 >= 0.18.0

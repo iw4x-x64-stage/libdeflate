@@ -37,7 +37,7 @@ pointing to the directory that contains the MinGW runtime DLLs
 (`/usr/x86_64-w64-mingw32/sys-root/mingw/bin` on Fedora). For example:
 
 ```
-git clone https://github.com/iw4x/libdeflate.git
+git clone https://github.com/iw4x-x64-stage/libdeflate.git
 cd libdeflate
 
 bdep init -C @gcc cc config.cxx=g++
@@ -51,7 +51,7 @@ On Windows we build with MSVC from the x64 Native Tools Command Prompt or the
 matching PowerShell, which builds 64-bit binaries. For example:
 
 ```
-git clone https://github.com/iw4x/libdeflate.git
+git clone https://github.com/iw4x-x64-stage/libdeflate.git
 cd libdeflate
 
 bdep init -C -@msvc cc config.cxx=cl
@@ -61,7 +61,7 @@ bdep test
 
 ## Contributing
 
-See https://github.com/iw4x/.github/blob/main/CONTRIBUTING.md
+See https://github.com/iw4x-x64-stage/.github/blob/main/CONTRIBUTING.md
 
 ## License
 
