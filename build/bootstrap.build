@@ -1,0 +1,7 @@
+project = libdeflate
+
+using version
+using config
+using test
+using install
+using dist

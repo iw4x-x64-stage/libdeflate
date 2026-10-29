@@ -1,0 +1,6 @@
+$out_root/
+{
+  include libdeflate/
+}
+
+export $out_root/libdeflate/$import.target

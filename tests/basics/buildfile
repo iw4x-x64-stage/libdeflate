@@ -1,0 +1,3 @@
+import libs = libdeflate%lib{deflate}
+
+exe{driver}: {hxx ixx txx cxx}{**} $libs testscript{**}

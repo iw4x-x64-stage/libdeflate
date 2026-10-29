@@ -1,0 +1,13 @@
+: 1
+name: libdeflate
+version: 0.1.0-a.0.z
+language: c++
+summary: deflate C++ library
+license: GPL-3.0-or-later ; GNU General Public License v3.0 or later.
+description-file: README.md
+url: https://example.org/libdeflate
+email: wroy@proton.me
+#build-error-email: wroy@proton.me
+depends: * build2 >= 0.18.0
+depends: * bpkg >= 0.18.0
+#depends: libhello ^1.0.0
