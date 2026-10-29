@@ -260,7 +260,7 @@ namespace deflate
      // unreachable. This gives the optimizer the information we need
      // after the branch.
      //
-#  define LIBDEFLATE_CONTRACT_ASSUME_(e)                                          \
+#  define LIBDEFLATE_CONTRACT_ASSUME_(e)                                       \
      do                                                                        \
      {                                                                         \
        if (!(e))                                                               \
@@ -308,47 +308,47 @@ namespace deflate
 // it appeared at the call site without each public macro having to
 // repeat this machinery.
 //
-#define LIBDEFLATE_CONTRACT_CHECK_(k, e, m)                                       \
+#define LIBDEFLATE_CONTRACT_CHECK_(k, e, m)                                    \
   (static_cast<bool> (e)                                                       \
    ? void ()                                                                   \
-   : ::deflate::contract_fail ((k),                                               \
-                            __FILE__,                                          \
-                            __LINE__,                                          \
-                            __func__,                                          \
-                            #e,                                                \
-                            (m)))
+   : ::deflate::contract_fail ((k),                                            \
+                               __FILE__,                                       \
+                               __LINE__,                                       \
+                               __func__,                                       \
+                               #e,                                             \
+                               (m)))
 
 #if LIBDEFLATE_CONTRACT >= LIBDEFLATE_CONTRACT_DEFAULT
 
-#  define LIBDEFLATE_PRE(e)                                                       \
-     LIBDEFLATE_CONTRACT_CHECK_ (::deflate::contract_kind::precondition,             \
-                              e,                                               \
-                              nullptr)
+#  define LIBDEFLATE_PRE(e)                                                    \
+     LIBDEFLATE_CONTRACT_CHECK_ (::deflate::contract_kind::precondition,       \
+                                 e,                                            \
+                                 nullptr)
 
-#  define LIBDEFLATE_PRE_MSG(e, m)                                                \
-     LIBDEFLATE_CONTRACT_CHECK_ (::deflate::contract_kind::precondition,             \
-                              e,                                               \
-                              m)
+#  define LIBDEFLATE_PRE_MSG(e, m)                                             \
+     LIBDEFLATE_CONTRACT_CHECK_ (::deflate::contract_kind::precondition,       \
+                                 e,                                            \
+                                 m)
 
-#  define LIBDEFLATE_ASSERT(e)                                                    \
-     LIBDEFLATE_CONTRACT_CHECK_ (::deflate::contract_kind::assertion,                \
-                              e,                                               \
-                              nullptr)
+#  define LIBDEFLATE_ASSERT(e)                                                 \
+     LIBDEFLATE_CONTRACT_CHECK_ (::deflate::contract_kind::assertion,          \
+                                 e,                                            \
+                                 nullptr)
 
-#  define LIBDEFLATE_ASSERT_MSG(e, m)                                             \
-     LIBDEFLATE_CONTRACT_CHECK_ (::deflate::contract_kind::assertion,                \
-                              e,                                               \
-                              m)
+#  define LIBDEFLATE_ASSERT_MSG(e, m)                                          \
+     LIBDEFLATE_CONTRACT_CHECK_ (::deflate::contract_kind::assertion,          \
+                                 e,                                            \
+                                 m)
 
      // There is no expression to test in this case. Getting here is the
      // failure, so use a fixed expression string for the diagnostic.
      //
-#  define LIBDEFLATE_UNREACHABLE()                                                \
-     ::deflate::contract_fail (::deflate::contract_kind::unreachable,                \
-                            __FILE__,                                          \
-                            __LINE__,                                          \
-                            __func__,                                          \
-                            "control reached this point")
+#  define LIBDEFLATE_UNREACHABLE()                                             \
+     ::deflate::contract_fail (::deflate::contract_kind::unreachable,          \
+                               __FILE__,                                       \
+                               __LINE__,                                       \
+                               __func__,                                       \
+                               "control reached this point")
 
 #else
 
@@ -369,10 +369,10 @@ namespace deflate
 //
 // As mentioned above, this relies on e having no side effects.
 //
-#  define LIBDEFLATE_ASSERT(e)    \
+#  define LIBDEFLATE_ASSERT(e)                                                 \
      LIBDEFLATE_CONTRACT_ASSUME_ (static_cast<bool> (e))
 
-#  define LIBDEFLATE_ASSERT_MSG(e, m)    \
+#  define LIBDEFLATE_ASSERT_MSG(e, m)                                          \
      LIBDEFLATE_CONTRACT_ASSUME_ (static_cast<bool> (e))
 
 #  define LIBDEFLATE_UNREACHABLE() LIBDEFLATE_CONTRACT_UNREACHABLE_ ()
@@ -399,9 +399,9 @@ namespace deflate
      // collide, which seems like a reasonable restriction for this
      // macro.
      //
-#  define LIBDEFLATE_POST(e)                                                      \
-     ::deflate::postcondition_guard                                               \
-       LIBDEFLATE_CONTRACT_CAT (libdeflate_postcondition_, __LINE__) (               \
+#  define LIBDEFLATE_POST(e)                                                   \
+     ::deflate::postcondition_guard                                            \
+       LIBDEFLATE_CONTRACT_CAT (libdeflate_postcondition_, __LINE__) (         \
          [&] () -> bool {return static_cast<bool> (e);},                       \
          __FILE__,                                                             \
          __LINE__,                                                             \
@@ -412,9 +412,9 @@ namespace deflate
      // invariant_guard, which evaluates the predicate once during
      // construction and once again on normal scope exit.
      //
-#  define LIBDEFLATE_INVARIANT(e)                                                 \
-     ::deflate::invariant_guard                                                   \
-       LIBDEFLATE_CONTRACT_CAT (libdeflate_invariant_, __LINE__) (                   \
+#  define LIBDEFLATE_INVARIANT(e)                                              \
+     ::deflate::invariant_guard                                                \
+       LIBDEFLATE_CONTRACT_CAT (libdeflate_invariant_, __LINE__) (             \
          [&] () -> bool {return static_cast<bool> (e);},                       \
          __FILE__,                                                             \
          __LINE__,                                                             \
