@@ -1,17 +1,7 @@
 # libdeflate - Deflate compression for IW4x projects.
 
 The `libdeflate` library compresses and decompresses data in the deflate
-format that RFC 1951 specifies. Its decompressor accepts every data set the
-specification defines and rejects everything else with a description of the
-fault, and its compressor produces only data sets that conform to it. Data is
-processed incrementally through compressor and decompressor objects, in one
-call over a whole buffer, or through standard input and output streams.
-
-The library handles the raw deflate format. The zlib (RFC 1950) and gzip
-(RFC 1952) formats wrap it with a header and a checksum, which are left to
-their own libraries.
-
-Documentation: https://iw4x.io/projects/libdeflate/doc/
+format that RFC 1951 specifies.
 
 ## Usage
 
