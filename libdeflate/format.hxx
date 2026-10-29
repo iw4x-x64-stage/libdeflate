@@ -37,6 +37,17 @@ namespace deflate
   inline constexpr std::size_t length_symbols (literal_symbols -
                                                first_length_symbol);
 
+  // Code lengths of the fixed literal/length code, by symbol, and of the
+  // fixed distance code, the same for every symbol (3.2.6).
+  //
+  constexpr std::uint8_t
+  fixed_literal_length (std::size_t s) noexcept
+  {
+    return s < 144 ? 8 : s < 256 ? 9 : s < 280 ? 7 : 8;
+  }
+
+  inline constexpr std::uint8_t fixed_distance_length (5);
+
   // Distance alphabet. Symbols 30 and 31 only take part in the construction
   // of the codes (3.2.5, 3.2.6, 3.2.7).
   //

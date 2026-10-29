@@ -34,10 +34,8 @@ namespace deflate
     {
       uint8_t l[fixed_literal_symbols];
 
-      ranges::fill (span (l).subspan (0,   144), 8);
-      ranges::fill (span (l).subspan (144, 112), 9);
-      ranges::fill (span (l).subspan (256, 24),  7);
-      ranges::fill (span (l).subspan (280, 8),   8);
+      for (size_t s (0); s != fixed_literal_symbols; ++s)
+        l[s] = fixed_literal_length (s);
 
       huffman_decoder r;
       r.build (l);
@@ -48,7 +46,7 @@ namespace deflate
     make_fixed_distance_code ()
     {
       uint8_t l[max_distance_codes];
-      ranges::fill (l, 5);
+      ranges::fill (l, fixed_distance_length);
 
       huffman_decoder r;
       r.build (l);
