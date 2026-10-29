@@ -1,0 +1,15 @@
+# The register of the people whose identities appear in the revision history,
+# one manifest per person. The .mailmap and AUTHORS files are generated from
+# it, so a change to how someone is identified or credited is made here and
+# both files are then regenerated with the mailmap and authors tools.
+#
+# The name and email values are the preferred identity. Each alias value is
+# another identity of the same person in the history, written as
+# 'Name <email>' or '<email>'. The authors value says how AUTHORS lists the
+# person: name (the default), email (name and email), or none (left out,
+# which is how bots are excluded).
+#
+: 1
+name: William Roy
+email: wroy@proton.me
+authors: name
