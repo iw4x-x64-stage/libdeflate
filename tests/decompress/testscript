@@ -1,0 +1,474 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
+
+# The data is written in the driver's assembly form (see the driver for
+# details). The fixed codes for the symbols we use are:
+#
+# 'a'  c10010001    256  c0000000    260  c0000100    284  c11000100
+# 'b'  c10010010    257  c0000001    263  c0000111    285  c11000101
+# 'c'  c10010011                                      286  c11000110
+# '!'  c01010001
+#
+# And the fixed distance code is the 5-bit symbol (c00000 is distance 1,
+# c00010 is distance 3).
+
+: stored
+: Test stored blocks
+:
+{{
+  : text
+  :
+  $* <'1:1 2:0 align 16:5 16:65530 x68656c6c6f' >:'hello'
+
+  : empty
+  :
+  $* <'1:1 2:0 align 16:0 16:65535' >:''
+
+  : padding
+  : Stored block whose header is padded with non-zero bits, which are
+  : ignored
+  :
+  $* <'1:1 2:0 5:31 16:5 16:65530 x68656c6c6f' >:'hello'
+
+  : complement
+  : Stored block length that does not match its complement
+  :
+  $* <'1:1 2:0 align 16:5 16:0 x68656c6c6f' 2>>EOE != 0
+  error: invalid stored block length complement 0 for length 5
+  EOE
+}}
+
+: fixed
+: Test blocks compressed with the fixed codes
+:
+{{
+  : literals
+  :
+  $* <'1:1 2:1 c10010001 c10010010 c10010011 c0000000' >:'abc'
+
+  : match
+  :
+  $* <<EOI >:'abcabcabc'
+  1:1 2:1 c10010001 c10010010 c10010011
+  c0000100 c00010 # Length 6, distance 3.
+  c0000000
+  EOI
+
+  : overlap
+  : Match that copies the bytes it produces
+  :
+  $* <'1:1 2:1 c10010001 c0000111 c00000 c0000000' >:'aaaaaaaaaa'
+
+  : length-258
+  :
+  $* --size <'1:1 2:1 c10010001 c11000101 c00000 c0000000' >'259'
+
+  : length-257
+  : Longest length of symbol 284
+  :
+  $* --size <'1:1 2:1 c10010001 c11000100 5:30 c00000 c0000000' >'258'
+
+  : length-284
+  : Symbol 284 with the extra bits that would make length 258, which lies
+  : outside its range
+  :
+  $* <'1:1 2:1 c10010001 c11000100 5:31 c00000 c0000000' 2>>EOE != 0
+  error: invalid length 258 for length symbol 284
+  EOE
+
+  : window
+  : Match at the largest distance, 32768
+  :
+  $* --tail 3 <<EOI >:'baa'
+  1:1 2:1 c10010010 c10010001
+  [ c11000101 c00000 ]*127   # 32766 more of 'a'.
+  c0000001 c11101 13:8191    # Length 3, distance 32768.
+  c0000000
+  EOI
+
+  : distance
+  : Match reaching back before the start of the data
+  :
+  $* <'1:1 2:1 c10010001 c0000001 c00001 c0000000' 2>>EOE != 0
+  error: invalid distance 2 at output offset 1
+  EOE
+
+  : symbol-286
+  : Literal/length symbol that never occurs in the data
+  :
+  $* <'1:1 2:1 c11000110' 2>>EOE != 0
+  error: invalid literal/length symbol 286
+  EOE
+
+  : symbol-30
+  : Distance symbol that never occurs in the data
+  :
+  $* <'1:1 2:1 c10010001 c0000001 c11110' 2>>EOE != 0
+  error: invalid distance symbol 30
+  EOE
+}}
+
+: dynamic
+: Test blocks compressed with dynamic codes
+:
+{{
+  # Header with a literal/length code of 'a' (c0), 256 (c10), and 257
+  # (c11), and a single distance code, for distance 1 (c0).
+  #
+  # Its code length code is 18 (c0), 1 (c10), and 2 (c11), and the code
+  # lengths are 97 zeros, 1, 158 zeros, 2, 2, and then the distance code
+  # length.
+  #
+  head = '1:1 2:2 5:1 5:0 4:14
+  3:0 3:0 3:1 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:2 3:0 3:2
+  c0 7:86 c10 c0 7:127 c0 7:9 c11 c11'
+
+  # As above but with a code length code that also has 0, which leaves the
+  # distance code empty: 18 (c0), 1 (c10), 0 (c110), and 2 (c111).
+  #
+  head0 = '1:1 2:2 5:1 5:0 4:14
+  3:0 3:0 3:1 3:3 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:3 3:0 3:2
+  c0 7:86 c10 c0 7:127 c0 7:9 c111 c111 c110'
+
+  # Header with the largest code counts, 286 literal/length codes and 32
+  # distance codes of length 5 (so the distance codeword is the symbol).
+  #
+  # Its code length code is 1 (c00), 2 (c01), 18 (c10), 5 (c110), and 16
+  # (c111).
+  #
+  headmax = '1:1 2:2 5:29 5:31 4:14
+  3:3 3:0 3:2 3:0 3:0 3:0 3:0 3:0 3:0 3:3 3:0 3:0 3:0 3:0 3:0 3:2 3:0 3:2
+  c10 7:86 c00 c10 7:127 c10 7:9 c01 c01 c10 7:17
+  c110 c111 2:3 c111 2:3 c111 2:3 c111 2:3 c111 2:3 c110'
+
+  : single-distance
+  : Distance code of a single code of length one
+  :
+  $* <"$head c10 c0 c11 c0 c10" >:'aaaa'
+
+  : unused-distance
+  : Unused codeword of a single distance code
+  :
+  $* <"$head c10 c0 c11 c1" 2>>EOE != 0
+  error: invalid distance codeword
+  EOE
+
+  : incomplete-distance
+  : Single distance code longer than one bit
+  :
+  $* <"$head c11 c0 c11 c0 c10" 2>>EOE != 0
+  error: invalid distance code: incomplete
+  EOE
+
+  : no-distance
+  : Empty distance code in a block of literals
+  :
+  $* <"$head0 c0 c10" >:'a'
+
+  : no-distance-match
+  : Match in a block with an empty distance code
+  :
+  $* <"$head0 c0 c11" 2>>EOE != 0
+  error: match in block without distance codes
+  EOE
+
+  : end-of-block
+  : Literal/length code without the end-of-block code
+  :
+  $* <<EOI 2>>EOE != 0
+  1:1 2:2 5:0 5:0 4:14
+  3:0 3:0 3:1 3:3 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:3 3:0 3:2
+  c0 7:86 c10 c0 7:127 c0 7:9 c110 c10
+  EOI
+  error: missing end-of-block code
+  EOE
+
+  : incomplete-literal
+  : Literal/length code of a single code
+  :
+  $* <<EOI 2>>EOE != 0
+  1:1 2:2 5:0 5:0 4:14
+  3:0 3:0 3:1 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:2 3:0 3:2
+  c0 7:127 c0 7:107 c10 c10 c0
+  EOI
+  error: invalid literal/length code: incomplete
+  EOE
+
+  : over-subscribed-literal
+  : Literal/length code of three codes of length one
+  :
+  $* <<EOI 2>>EOE != 0
+  1:1 2:2 5:1 5:0 4:14
+  3:0 3:0 3:1 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:0 3:2 3:0 3:2
+  c0 7:86 c10 c0 7:127 c0 7:9 c10 c10 c10
+  EOI
+  error: invalid literal/length code: over-subscribed
+  EOE
+
+  : over-subscribed-length
+  : Code length code of four codes of length one
+  :
+  $* <'1:1 2:2 5:0 5:0 4:0 3:1 3:1 3:1 3:1' 2>>EOE != 0
+  error: invalid code length code: over-subscribed
+  EOE
+
+  : incomplete-length
+  : Code length code of a single code
+  :
+  $* <'1:1 2:2 5:0 5:0 4:0 3:0 3:0 3:1 3:0' 2>>EOE != 0
+  error: invalid code length code: incomplete
+  EOE
+
+  : empty-length
+  : Code length code without codes
+  :
+  $* <'1:1 2:2 5:0 5:0 4:0 3:0 3:0 3:0 3:0' 2>>EOE != 0
+  error: invalid code length code: empty
+  EOE
+
+  # The code length code in the repeat tests has 0 (c00), 16 (c01), 17
+  # (c10), and 18 (c11).
+  #
+  : repeat-first
+  : Repeat of the previous code length before any
+  :
+  $* <'1:1 2:2 5:0 5:0 4:0 3:2 3:2 3:2 3:2 c01 2:0' 2>>EOE != 0
+  error: code length repeat with no previous length
+  EOE
+
+  : repeat-beyond
+  : Repeat past the end of the code lengths
+  :
+  $* <'1:1 2:2 5:0 5:0 4:0 3:2 3:2 3:2 3:2 c11 7:127 c11 7:127' 2>>EOE != 0
+  error: code length repeat beyond 258 code lengths
+  EOE
+
+  : literal-count
+  : Literal/length code count of 287
+  :
+  $* <'1:1 2:2 5:30 5:0 4:0' 2>>EOE != 0
+  error: invalid literal/length code count 287
+  EOE
+
+  : largest-counts
+  :
+  $* <"$headmax c0 c11 c00000 c10" >:'aaaa'
+
+  : largest-counts-symbol-30
+  : Distance symbol 30 that has a code but never occurs in the data
+  :
+  $* <"$headmax c0 c11 c11110" 2>>EOE != 0
+  error: invalid distance symbol 30
+  EOE
+}}
+
+: zlib
+: Test data that zlib produces
+:
+{{
+  # Data that zlib compresses at levels 1 and 9, into dynamic blocks.
+  #
+  : level-1
+  :
+  {
+    $* <<EOI >>EOO
+    x5d93416edd300c44f73e059165f0db03b4cbacb2eba239002dd13601895249ea27eee90b
+    xda71f0d1a52d88c33733fabd11f4a1bd19415bc03736b04e89174ee8dc04d8c01b645a58
+    x08104a332b6436a556bb921965c8e8084bd38a0ebea1ff989ee1d580255327c9241eb35f
+    x7ebd81ef9d6ed03a293acb0ab69b53bdc1c285ae8f092543da5031392918f90de2d74692
+    x08120acc04237497a6c0e2a4694359e9e7f40c2fe771d79647a20c4d2135b15129df80ee
+    x24c72514409dd91595cb0ea5c93a19fd1924ce58ca0e4146e29481a50f3f09cd95b0de60
+    x58acdea4ecc7a0a92b376598db904c19b0b671121fbb55ca8c4e60de14577a60991e5958
+    x4e91d46a1df269bec5fec6950b6ac88fe443c9261b6903347813fe08ef9cd40efa2b133b
+    x87bdb36f40cbc28949d21ec33b2ace852253df0866329fd25025f1e0b92397e37c2521c5
+    xf2ed2ac7157754a2926f2ddb99140b7454e73462c9309b3385c60e337924e81bca21f674
+    x0d799abab655b13e44c6b517aaa7e94a9823181640a828420ad21c52bb935286799f3a3a
+    x89db839d57357a148723fc4589ca1e1aaf76b23b07fb614bd01fb5fb2cee5765e6fd38fb
+    x34657ae74c653f0bb7fee50ec3b9b0efb7d82eda1ecc31234a91e9426c6ad33b971265bd
+    x0c0fac3398ffc5e883ed7810a1f0f5b49a7e9ffe01
+    EOI
+    The purpose of this specification is to define a lossless
+    compressed data format that:
+    * Is independent of CPU type, operating system, file system,
+    and character set, and hence can be used for interchange;
+    * Can be produced or consumed, even for an arbitrarily long
+    sequentially presented input data stream, using only an a
+    priori bounded amount of intermediate storage, and hence
+    can be used in data communications or similar structures
+    such as Unix filters;
+    * Compresses data with efficiency comparable to the best
+    currently available general-purpose compression methods,
+    and in particular considerably better than the "compress"
+    program;
+    * Can be implemented readily in a manner not covered by
+    patents, and hence can be practiced freely;
+    * Is compatible with the file format produced by the current
+    widely used gzip utility, in that conforming decompressors
+    will be able to read data produced by the existing gzip
+    compressor.
+    EOO
+  }
+
+  : level-9
+  :
+  {
+    $* <<EOI >>EOO
+    x6d533b8edc300ced7d0a62cb60920364cbadd2a5c81e4096689b802d292235bbcee9f368
+    x8f93459066604bf4fb727e2c4cb5b75a94a94c648b2869e52893c4605232e1c00a259e24
+    x33055a8beacaaa432c5b6d78e0442958a0a9b42d1810827d1d3ed13725c9892be3279b63
+    xbf7c7f25db2bdfa8546e00cf33e9aec6db8d2659f97a19424e1497d042346ea46c37f2a3
+    x8573648a21d3c8d49d179420c110a6f3cccfa07d39af6b2ba9478c602296ac7de37423be
+    x733e3ec25068a3580b4dd61d9ef23c28ffec502a61c5893bc30b0024d76ea743b5c60162
+    xbbbaf49231e740436d529ad0583abc260a1b1e0ec78736304b30b8b3d2c2cc1fbc0c1fbd
+    x483e4910ebd6f3237c75fd2a9baca1397d8fd6a16cd01e170a4aaf59de3d3bd0e8e1feea
+    x444fb037b18578429702c2ddc12b721d11363a35743fb2da107b6b70eb7eee015c7e3f73
+    x4649ebe76b39aeba7d2536b6a5243d9b8270609ac4ee223d6c49ec1c3bc0cd1bc44ae483
+    xece902794266656e61fb50996c75e5ed0c1d39272f06d881b69021857231a0dfb9e17edc
+    x878a4cb3e97f56a3fae288973f35e6757f3eb7f1f06ee2de8e585cd0b1768fc5fdb332e3
+    x7edc3d4219de6007528e92e65f52a99bac62fbcdd5f9b6bb67c7f0a5487c592c4df1e9ba
+    xbaa22b70b77516f32f19bf8b1e7f086718fe627c197e03
+    EOI
+    The purpose of this specification is to define a lossless
+    compressed data format that:
+    * Is independent of CPU type, operating system, file system,
+    and character set, and hence can be used for interchange;
+    * Can be produced or consumed, even for an arbitrarily long
+    sequentially presented input data stream, using only an a
+    priori bounded amount of intermediate storage, and hence
+    can be used in data communications or similar structures
+    such as Unix filters;
+    * Compresses data with efficiency comparable to the best
+    currently available general-purpose compression methods,
+    and in particular considerably better than the "compress"
+    program;
+    * Can be implemented readily in a manner not covered by
+    patents, and hence can be practiced freely;
+    * Is compatible with the file format produced by the current
+    widely used gzip utility, in that conforming decompressors
+    will be able to read data produced by the existing gzip
+    compressor.
+    EOO
+  }
+}}
+
+: data
+: Test the sequence of blocks
+:
+{{
+  : multiple-blocks
+  :
+  $* <<EOI >:'hi!'
+  1:0 2:0 align 16:2 16:65533 x6869
+  1:1 2:1 c01010001 c0000000
+  EOI
+
+  : across-blocks
+  : Match that reaches back into the previous block
+  :
+  $* <<EOI >:'abcabc'
+  1:0 2:0 align 16:3 16:65532 x616263
+  1:1 2:1 c0000001 c00010 c0000000
+  EOI
+
+  : block-type
+  : Reserved block type
+  :
+  $* <'1:1 2:3' 2>>EOE != 0
+  error: invalid block type 3
+  EOE
+
+  : empty
+  : No data at all
+  :
+  $* <'' 2>>EOE != 0
+  error: incomplete deflate data
+  EOE
+
+  : incomplete
+  : Data that ends before the final block does
+  :
+  $* <'1:1 2:1 c10010001' 2>>EOE != 0
+  error: incomplete deflate data
+  EOE
+
+  : junk
+  : Data followed by another byte
+  :
+  $* <'1:1 2:1 c10010001 c0000000 align x00' 2>>EOE != 0
+  error: junk after deflate data
+  EOE
+}}
+
+: chunk
+: Test decompression in parts
+:
+{{
+  # Feed the data a byte at a time, with room for a byte of output, so that
+  # the decompressor stops at every point it can.
+  #
+  : dynamic
+  :
+  {
+    $* --chunk 1 <<EOI >>EOO
+    x6d533b8edc300ced7d0a62cb60920364cbadd2a5c81e4096689b802d292235bbcee9f368
+    x8f93459066604bf4fb727e2c4cb5b75a94a94c648b2869e52893c4605232e1c00a259e24
+    x33055a8beacaaa432c5b6d78e0442958a0a9b42d1810827d1d3ed13725c9892be3279b63
+    xbf7c7f25db2bdfa8546e00cf33e9aec6db8d2659f97a19424e1497d042346ea46c37f2a3
+    x8573648a21d3c8d49d179420c110a6f3cccfa07d39af6b2ba9478c602296ac7de37423be
+    x733e3ec25068a3580b4dd61d9ef23c28ffec502a61c5893bc30b0024d76ea743b5c60162
+    xbbbaf49231e740436d529ad0583abc260a1b1e0ec78736304b30b8b3d2c2cc1fbc0c1fbd
+    x483e4910ebd6f3237c75fd2a9baca1397d8fd6a16cd01e170a4aaf59de3d3bd0e8e1feea
+    x444fb037b18578429702c2ddc12b721d11363a35743fb2da107b6b70eb7eee015c7e3f73
+    x4649ebe76b39aeba7d2536b6a5243d9b8270609ac4ee223d6c49ec1c3bc0cd1bc44ae483
+    xece902794266656e61fb50996c75e5ed0c1d39272f06d881b69021857231a0dfb9e17edc
+    x878a4cb3e97f56a3fae288973f35e6757f3eb7f1f06ee2de8e585cd0b1768fc5fdb332e3
+    x7edc3d4219de6007528e92e65f52a99bac62fbcdd5f9b6bb67c7f0a5487c592c4df1e9ba
+    xbaa22b70b77516f32f19bf8b1e7f086718fe627c197e03
+    EOI
+    The purpose of this specification is to define a lossless
+    compressed data format that:
+    * Is independent of CPU type, operating system, file system,
+    and character set, and hence can be used for interchange;
+    * Can be produced or consumed, even for an arbitrarily long
+    sequentially presented input data stream, using only an a
+    priori bounded amount of intermediate storage, and hence
+    can be used in data communications or similar structures
+    such as Unix filters;
+    * Compresses data with efficiency comparable to the best
+    currently available general-purpose compression methods,
+    and in particular considerably better than the "compress"
+    program;
+    * Can be implemented readily in a manner not covered by
+    patents, and hence can be practiced freely;
+    * Is compatible with the file format produced by the current
+    widely used gzip utility, in that conforming decompressors
+    will be able to read data produced by the existing gzip
+    compressor.
+    EOO
+  }
+
+  : stored
+  :
+  $* --chunk 1 <'1:1 2:0 align 16:5 16:65530 x68656c6c6f' >:'hello'
+
+  : window
+  :
+  $* --chunk 3 --tail 3 <<EOI >:'baa'
+  1:1 2:1 c10010010 c10010001
+  [ c11000101 c00000 ]*127
+  c0000001 c11101 13:8191
+  c0000000
+  EOI
+
+  : incomplete
+  :
+  $* --chunk 1 <'1:1 2:1 c10010001' 2>>EOE != 0
+  error: incomplete deflate data
+  EOE
+
+  : junk
+  :
+  $* --chunk 1 <'1:1 2:1 c10010001 c0000000 align x00' 2>>EOE != 0
+  error: junk after deflate data
+  EOE
+}}
