@@ -1,8 +1,9 @@
 # Copyright (c) the IW4x authors (see the AUTHORS file).
 # SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
 
-./: {*/ -build/} doc{README.md NEWS} \
-    legal{LICENSE.md LICENSE-EXCEPTION.md AUTHORS} manifest
+./: {*/ -build/}                                             \
+    doc{README.md NEWS}                                      \
+    legal{LICENSE.md LICENSE-EXCEPTION.md AUTHORS LEGAL} manifest
 
 # Don't install tests.
 #
