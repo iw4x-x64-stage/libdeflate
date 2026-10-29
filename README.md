@@ -61,7 +61,7 @@ bdep test
 
 ## Contributing
 
-See https://github.com/iw4x-x64-stage/.github/blob/main/CONTRIBUTING.md
+See [CONTRIBUTING](.github/CONTRIBUTING.md).
 
 ## License
 
