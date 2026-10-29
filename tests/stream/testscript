@@ -1,0 +1,57 @@
+# Copyright (c) the IW4x authors (see the AUTHORS file).
+# SPDX-License-Identifier: GPL-3.0-only WITH AdditionRef-IW4x-Exception-1.1
+
++touch zero
++cat <<EOI >=1kb
+A deflate stream compresses what is written to it into another stream and
+a deflate input stream decompresses what it reads from another stream. The
+compressed data is written as it fills the compressor's blocks, so a writer
+may produce a lot of output before anything at all reaches the other
+stream, and only closing the stream writes the final block. A reader gets
+the decompressed data as soon as the decompressor produces it, and if it
+is told that the compressed data ends the stream, it verifies that
+nothing follows it. Otherwise, it leaves whatever follows
+the compressed data in the other stream, for the reader to read next. The
+streams buffer the data on both sides, so writing and reading a character
+at a time costs no more than writing and reading it in larger parts, and
+neither stream depends on the other: what one writes, any decompressor can
+read, and what the other reads, any compressor can write, as long as it is
+deflate data.
+EOI
++cat 1kb 1kb 1kb 1kb 1kb 1kb 1kb 1kb >=8kb
++cat 8kb 8kb 8kb 8kb 8kb 8kb 8kb 8kb >=64kb
++$* -c 6 <:'hello' >=hello
++cat <:'tail' >=tail
++cat hello tail >=hello-tail
+
+w = $~
+
+: round-trip
+: Compress into a stream and decompress from a stream
+:
+{{
+  $* -c 6 <<<$w/zero | $* -d >>>$w/zero : zero
+  $* -c 6 <<<$w/1kb  | $* -d >>>$w/1kb  : 1kb
+  $* -c 6 <<<$w/64kb | $* -d >>>$w/64kb : 64kb
+  $* -c 0 <<<$w/64kb | $* -d >>>$w/64kb : store
+  $* -c 9 <<<$w/64kb | $* -d >>>$w/64kb : smallest
+}}
+
+: rest-left
+: Data followed by more of the stream, which is left in it
+:
+$* -d --rest <<<$w/hello-tail >:'hello|tail'
+
+: junk-rejected
+: Data followed by more of the stream that must end with it
+:
+$* -d <<<$w/hello-tail 2>>EOE != 0
+error: junk after deflate data
+EOE
+
+: incomplete-rejected
+: Stream that ends before the data does
+:
+$* -d <<<$w/zero 2>>EOE != 0
+error: incomplete deflate data
+EOE
