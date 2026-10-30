@@ -3,6 +3,7 @@
 
 #include <libdeflate/compressor.hxx>
 
+#include <bit>       // bit_width()
 #include <vector>
 #include <limits>    // numeric_limits
 #include <iterator>  // size()
@@ -20,7 +21,7 @@ namespace deflate
   {
     // How hard each level looks for matches.
     //
-    // A level with lazy matching looks for a longer match at the next
+    // A level with lazy matching looks for a better match at the next
     // position before it records the match at the current one (see RFC 1951
     // section 4). The values are those that zlib uses for its levels.
     //
@@ -64,6 +65,35 @@ namespace deflate
     //
     constexpr unsigned hash_bits (15);
     constexpr size_t   hash_size (static_cast<size_t> (1) << hash_bits);
+
+    // Return true if the match at the next position is better than the
+    // match at the current one, which lazy matching then gives up for a
+    // literal.
+    //
+    // A longer match covers more of the data, but a farther one needs more
+    // extra bits, one more for each doubling of the distance. We count a
+    // byte of length as worth four of these bits and take the next match
+    // only if it comes out more than two bits ahead, since it also costs the
+    // literal. Note that taking every longer match makes a list of numbers
+    // about a quarter larger: there the next position often has a match one
+    // byte longer at a far distance.
+    //
+    bool
+    better_match (size_t length,
+                  size_t distance,
+                  size_t current_length,
+                  size_t current_distance) noexcept
+    {
+      LIBDEFLATE_PRE (distance != 0 && current_distance != 0);
+
+      const int l (static_cast<int> (length) -
+                   static_cast<int> (current_length));
+
+      const int d (static_cast<int> (bit_width (distance)) -
+                   static_cast<int> (bit_width (current_distance)));
+
+      return 4 * l - d > 2;
+    }
 
     // Return the index of the symbol for the match length or the distance
     // in the length or distance tables (see format.hxx).
@@ -473,12 +503,17 @@ namespace deflate
         continue;
       }
 
-      // With lazy matching, if the previous position's match is at least
-      // as long as this one's, then record it. Otherwise, the previous
-      // position is a literal, and this one's match waits for the next
-      // position to compare with.
+      // With lazy matching, record the previous position's match unless
+      // this one's is better. Otherwise, the previous position is a
+      // literal, and this one's match waits for the next position to
+      // compare with. Note that start is only set if this match is longer.
       //
-      if (previous_length_ >= min_match && length <= previous_length_)
+      if (previous_length_ >= min_match &&
+          (length <= previous_length_ ||
+           !better_match (length,
+                          pos_ - start,
+                          previous_length_,
+                          pos_ - 1 - previous_start_)))
       {
         const size_t p (pos_ - 1);
 

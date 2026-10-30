@@ -76,9 +76,10 @@ namespace
   }
 }
 
-// Usage: argv[0] -c <level> [--chunk <n>]
+// Usage: argv[0] -c <level> [--chunk <n>] [--size]
 //        argv[0] -d
 //        argv[0] -r <size>
+//        argv[0] -n <first> <last>
 //
 // -c  compress stdin at the level with compress() and write the result to
 //     stdout
@@ -88,9 +89,16 @@ namespace
 //     compress with a compressor object instead, passing it n bytes of the
 //     data at a time with room for n bytes of output
 //
+// --size
+//
+//     write the size of the compressed data in bytes and a newline to
+//     stdout
+//
 // -d  decompress stdin with decompress() and write the result to stdout
 //
 // -r  write size pseudo-random bytes to stdout, the same ones every time
+//
+// -n  write the numbers from first to last to stdout, one per line
 //
 int
 main (int argc, char* argv[])
@@ -110,6 +118,16 @@ main (int argc, char* argv[])
   {
     assert (argc == 3);
     print ("{}", generate_random (stoul (argv[2])));
+    return 0;
+  }
+
+  if (m == "-n")
+  {
+    assert (argc == 4);
+
+    for (unsigned long i (stoul (argv[2])), n (stoul (argv[3])); i <= n; ++i)
+      println ("{}", i);
+
     return 0;
   }
 
@@ -135,18 +153,35 @@ main (int argc, char* argv[])
     return 0;
   }
 
-  assert (m == "-c" && (argc == 3 || argc == 5));
+  assert (m == "-c" && argc >= 3);
 
   const compression_level l (
     static_cast<compression_level> (stoul (argv[2])));
 
   optional<size_t> chunk;
-  if (argc == 5)
+  bool size (false);
+
+  for (int i (3); i != argc; ++i)
   {
-    assert (argv[3] == string_view ("--chunk"));
-    chunk = stoul (argv[4]);
-    assert (*chunk != 0);
+    const string_view o (argv[i]);
+
+    if (o == "--chunk")
+    {
+      assert (i + 1 != argc);
+      chunk = stoul (argv[++i]);
+      assert (*chunk != 0);
+    }
+    else
+    {
+      assert (o == "--size");
+      size = true;
+    }
   }
 
-  print ("{}", chunk ? compress_chunks (d, l, *chunk) : compress (d, l));
+  const string r (chunk ? compress_chunks (d, l, *chunk) : compress (d, l));
+
+  if (size)
+    println ("{}", r.size ());
+  else
+    print ("{}", r);
 }

@@ -174,12 +174,12 @@ $ pack/pack -d <numbers.z | cmp - numbers.txt
 
 $ wc -c numbers.txt numbers.z
 588895 numbers.txt
-212845 numbers.z
-801740 total
+171519 numbers.z
+760414 total
 \
 
 The decompressed data is the same as the original (\c{cmp} prints nothing)
-and the compressed data takes a little over a third of its size. Since we
+and the compressed data takes a little under a third of its size. Since we
 didn't specify the compression level, \c{compress()} used the default,
 \c{compression_level::balanced} (see \l{#levels Compression Levels} for the
 other levels).
@@ -300,7 +300,7 @@ $ pack/pack <numbers.txt >numbers.z
 $ pack/pack -d <numbers.z | cmp - numbers.txt
 
 $ wc -c numbers.z
-212845 numbers.z
+171519 numbers.z
 
 $ (cat numbers.z; echo junk) | pack/pack -d >/dev/null
 error: junk after deflate data

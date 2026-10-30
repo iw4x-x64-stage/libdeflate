@@ -3,7 +3,8 @@
 
 # Text whose 1kb line repeats in the larger files, which therefore compress
 # well, and random data, which doesn't. In r40k the second half repeats the
-# first at distance 20000.
+# first at distance 20000. Each line of numbers repeats most of the line
+# before it and parts of lines further back.
 #
 +touch zero
 +cat <:'1' >=one
@@ -30,6 +31,7 @@ EOI
 +$* -r 20000 >=r20k
 +cat r20k r20k >=r40k
 +$* -r 100000 >=r100k
++$* -n 100000 120000 >=numbers
 
 w = $~
 
@@ -61,6 +63,26 @@ w = $~
   $* -c 8 <<<$w/64kb | $* -d >>>$w/64kb : 8
   $* -c 9 <<<$w/64kb | $* -d >>>$w/64kb : 9
 }}
+
+: lazy
+: Compress numbers at a level with lazy matching
+:
+: In the numbers the match at the next position is often a byte longer
+: than the current one but much farther away. Taking it would cost a
+: literal and longer distance codes, so lazy matching should keep the
+: current match and compress the numbers no worse than level 1 does.
+:
+{
+  $* -c 1 --size <<<$w/numbers | set fastest [uint64]
+  $* -c 6 --size <<<$w/numbers | set balanced [uint64]
+
+  if ($balanced > $fastest)
+  {
+    exit "level 6 gives $balanced bytes, level 1 gives $fastest"
+  }
+
+  $* -c 6 <<<$w/numbers | $* -d >>>$w/numbers
+}
 
 : random
 : Compress data that doesn't compress
